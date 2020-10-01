@@ -5,7 +5,7 @@
  
 #define ADD true
 #define SUB false
- 
+  
 int val = 0;
 boolean stat = ADD;
  
@@ -21,7 +21,15 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel( MAX_LED, PIN, NEO_RGB + NEO_KHZ800 
 
 #include <Wire.h>  // Wire library - used for I2C communication
 int ADXL345 = 0x53; // The ADXL345 sensor I2C address
-float X_out, Y_out, Z_out;  // Outputs
+double X_out, Y_out, Z_out, G_out = 0, FG_out = 0;  // Outputs
+double peak = 0;
+double b = 0.01;  // 低通过滤器系数
+
+double filter(double oldValue, double newValue)
+{
+    return b * oldValue + (1 - b) * newValue;
+}
+
 
 void setupLed()
 {
@@ -73,6 +81,9 @@ void setup()
 }
 
 uint8_t a = 0;
+double oldValue = 0;
+bool isUp = false;
+double peakValue = 0;
 
 void runADXL()
 {
@@ -88,19 +99,49 @@ void runADXL()
     Y_out = Y_out / 256;
     Z_out = ( Wire.read()| Wire.read() << 8);   // Z-axis value
     Z_out = Z_out / 256;
-    
+
+    /*
     Serial.print("Xa= ");
     Serial.print(X_out);
     Serial.print("   Ya= ");
     Serial.print(Y_out);
     Serial.print("   Za= ");
     Serial.println(Z_out);
+    */
+    G_out = sqrt(square(X_out) + square(Y_out) + square(Z_out));
+    FG_out = filter(FG_out, G_out);
+
+
+    if (oldValue != 0) {
+        if (oldValue <= G_out) {
+            isUp = true;
+            Serial.println("Up......");
+        } else {
+            if (isUp == false) {
+                peakValue = oldValue;
+            }
+            
+            isUp = false;
+            Serial.println("Down......");
+        }
+    }
+
+    oldValue = G_out;
+
+    Serial.print("Ga= ");
+    Serial.print(G_out);
+    Serial.print(",     Peak= ");
+    Serial.println(peakValue+2);
+
+    if (G_out > 1.2) {
+        runLed();
+    }
 }
 
 void runLed()
 {
     uint8_t i;                                        
-    uint32_t color = strip.Color(60, 255, 120);         //选择所显示的颜色
+    uint32_t color = strip.Color(12,43,32);         //选择所显示的颜色
 
     for (i = 0;i < MAX_LED; i++) {
         if (i == a)  {
@@ -117,6 +158,6 @@ void runLed()
 void loop()
 {
     runADXL();
-    runLed();
+     
     delay(50);                                   //延时20ms；
 }
